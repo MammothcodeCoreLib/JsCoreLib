@@ -1011,17 +1011,26 @@ Mc.Util.String.notNullOrEmpty = function (str) {
 };
 
 /**
+ * [isOnlyOne]
+ * @param  {[type]}  str [obj]
+ * @return {Boolean}     [check str if it length === 1]
+ */
+Mc.Util.String.isOnlyOne = function (str) {
+	return str instanceof Array === false && str;
+};
+
+/**
  * [Checkphonecode 正则表达式验证手机号是否正确]
- * @param  {varchar} phonenum
+ * @param  {varchar} phoneCode
  * @return {Boolean}
  */
-Mc.Util.Check.checkPhoneCode = function (phonenum) {
-    //待检测表达式是否正确
-    var right = /^((\(\d{3}\))|(\d{3}\-))?13\d{9}|14[57]\d{8}|15\d{9}|18\d{9}|17\d{9}$/;
-    if (phonenum.length !== 11 || !phonenum.match(right)) {
-        return false;
+Mc.Util.Check.checkPhoneCode = function (phoneCode) {
+    var reg;
+    if (Baby.Util.String.isOnlyOne(phoneCode)) {
+    	reg = /^((\(\d{3}\))|(\d{3}\-))?13\d{9}|14[57]\d{8}|15\d{9}|18\d{9}|17\d{9}$/;
+    	return phoneCode.length === 11 && reg.test(phoneCode);
     }
-    return true;
+    return false;
 };
 
 /**
