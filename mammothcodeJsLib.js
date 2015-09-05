@@ -1011,7 +1011,7 @@ Mc.Util.String.notNullOrEmpty = function (str) {
 };
 
 /**
- * [isOnlyOne]
+ * [isOnlyOne 判断传入对象是否为单个对象]
  * @param  {[type]}  str [obj]
  * @return {Boolean}     [check str if it length === 1]
  */
