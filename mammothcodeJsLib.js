@@ -991,23 +991,23 @@ Mc.Util.isNumber = function (obj) {
 }
 
 /**
- * [isNullorEmpty 判断字符串数组是否为空]
+ * [notNullOrEmpty 判断字符串数组是否为空]
  * @param  {string[]} str
  * @return {Boolean}
  */
-Mc.Util.String.isNullOrEmpty = function (str) {
-    // body...
-    var result = false;
-    if (str.length !== 0) {
-        for (var i = 0; i < str.length; i++) {
-            if (str[i] !== "") {
-                result = true;
-            } else {
-                result = false;
-            }
-        }
+Mc.Util.String.notNullOrEmpty = function (str) {
+    var item, _i, _len;
+    if (str !== null && str.length > 0) {
+		for (_i = 0, _len = str.length; _i < _len; _i++) {
+        	item = str[_i];
+        	if (!item) {
+          		return false;
+        	}
+		}
+    } else {
+      	return false;
     }
-    return result;
+    return true;
 };
 
 /**
