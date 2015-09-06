@@ -1,5 +1,5 @@
 //mammothcodeCoreJsLib
-//version 0.2.4
+//version 0.2.5
 
 //======= namespacep START=======//
 var Mc = {}; //曼码JsLib
@@ -667,6 +667,7 @@ Mc.Util.preventScroll = function (id) {
 }
 
 /**
+ * @deprecated
  * [工具函数-自定义下拉选择框]
  * @param {} selector 下拉选择框对应的jQ选择器
  * @param {} callback 选项选择时回调函数
@@ -703,6 +704,238 @@ Mc.Util.selectMenu = function (selector, callback) {
         $selectorUl.hide();
         $selector.removeClass("open");
     });
+}
+
+/**
+ * [工具函数-自定义下拉选择框v2]
+ * [last alter 2015-9-6 16:18:09 by zero]
+ * [target - selectBox的jQ选择器 | 默认 ""]
+ * [group - 分组-组值 | 默认分组 "McSelectBox"]
+ * [callback - 候选项点击回调函数 | 默认 null]
+ * @version 1.1
+ * @author Zero
+ * @param {} options 
+ * @returns {} 
+ */
+Mc.Util.selectBox = function (options) {
+    var settings = $.extend({
+        target: "", //selectBox的jQ选择器 | 默认 ""
+        group: "McSelectBox", //分组-组值 | 默认分组 "McSelectBox"
+        callback: null //候选项点击回调函数 | 默认 null
+    }, options);
+    var $target = $(settings.target); //下拉框对象
+    var $targetInput = $target.find("input"); //下拉框input对象(存储选择项mc-select-value字段的值)
+    var $targetDiv = $target.find("div"); //下拉框div对象(存储选择项文本内容)
+    var $targetUl = $target.find("ul"); //下拉框ul对象(候选项列表)
+    var $targetLi = $targetUl.find("li"); //下拉框候选项
+    var tempAddOptionTxt = new Array(); //单项新增的时候的临时存储数组(存储选择项文本内容)
+    var tempAddOptionValue = new Array(); //单项新增的时候的临时存储数组(存储选择项mc-select-value字段的值)
+    //初始化
+    function selectBoxIni() {
+        //隐藏下拉框
+        if (!$target.hasClass("mc-active")) {
+            $targetUl.hide();
+        }
+        //分组
+        $target.attr("mc-group", settings.group);
+    }
+    $(function () {
+        selectBoxIni();
+    });
+    //设置下拉框当前值
+    function setValue(txt, mcSelectValue) {
+        $targetInput.val(mcSelectValue);
+        $targetDiv.text(txt);
+    }
+    //更新下拉候选项
+    function update() {
+        $targetLi = $targetUl.find("li");
+    }
+    //添加候选项
+    function add(txtList, mcSelectValueList) {
+        var optionHtml = "";
+        //todo 进行是否为数组判断,及两个数组长度匹配判断
+        var optionLength = mcSelectValueList.length > txtList.length ? mcSelectValueList.length : txtList.length;
+        for (var i = 0; i < optionLength; i++) {
+            optionHtml += '<li mc-select-value="' + mcSelectValueList[i] + '">' + txtList[i] + '</li>';
+        }
+        $targetUl.append(optionHtml);
+        update();
+    }
+    //绑定下拉事件
+    $target.on("click", function (ev) {
+        if ($targetLi.length) {
+            var $this = $(this);
+            if ($this.hasClass("mc-active")) {
+                $targetUl.hide();
+                $this.removeClass("mc-active");
+            } else {
+                //关闭同组其他下拉框
+                $("[mc-group=" + settings.group + "]").removeClass("mc-active").find("ul").hide();
+                $this.addClass("mc-active");
+                $targetUl.show();
+            }
+            ev.stopPropagation();
+        }
+    });
+    //绑定候选项点击事件
+    $target.on("click", 'li', function (ev) {
+        var $this = $(this); //点击项
+        var txt = $this.text(); //点击项txt
+        var mcSelectValue = $this.attr("mc-select-value"); //点击项mc-select-value
+        setValue(txt, mcSelectValue); //设置下拉框值
+        if (settings.callback != null) settings.callback(this, mcSelectValue);
+        $targetUl.hide();
+        $target.removeClass("mc-active");
+        ev.stopPropagation();
+    });
+    //外部点击隐藏下拉框
+    $(document).click(function () {
+        $targetUl.hide();
+        $target.removeClass("mc-active");
+    });
+    return {
+        /**
+         * 判断下拉框是否有选择值
+         * @returns {} true->有值,false->无值
+         */
+        hasValue: function () {
+            if (Mc.Util.isNull($targetInput.val())) {
+                return false;
+            } else {
+                return true;
+            }
+        },
+
+        /**
+         * 设置下拉框默认值
+         * @param {} txt 默认值文本值
+         * @param {} mcSelectValue 默认值隐藏字段值
+         * @returns {} 
+         */
+        setDefaultValue: function (txt, mcSelectValue) {
+            setValue(txt, mcSelectValue); //设置下拉框值
+        },
+
+        /**
+         * 根据索引设置索引项为当前项
+         * @param {} index 索引值
+         * @returns {} 
+         */
+        setSelect: function (index) {
+            //todo 索引范围判断
+            var $select = $targetLi.eq(index);
+            var mcSelectValue = $select.attr("mc-select-value"); //候选项mc-select-value
+            var txt = $select.text(); //候选项txt
+            setValue(txt, mcSelectValue); //设置下拉框值
+        },
+        /**
+         * 根据文本值设置匹配项为当前项
+         * @param {} txt 文本值
+         * @returns {} true 找到匹配项, false 未找到匹配项
+         */
+        setSelectByTxt: function (txt) {
+            var _this = this;
+            var hasMatch = false;
+            $targetLi.each(function (i, val) {
+                if ($(val).text() == txt) {
+                    hasMatch = true;
+                    _this.setSelect(i);
+                    return false;
+                }
+            });
+            return hasMatch;
+        },
+        /**
+         * 根据隐藏字段值设置匹配项为当前项
+         * @param {} mcSelectValue 隐藏字段值
+         * @returns {} true 找到匹配项, false 未找到匹配项
+         */
+        setSelectByValue: function (mcSelectValue) {
+            var _this = this;
+            var hasMatch = false;
+            $targetLi.each(function (i, val) {
+                if ($(val).attr("mc-select-value") == mcSelectValue) {
+                    hasMatch = true;
+                    _this.setSelect(i);
+                    return false;
+                }
+            });
+            return hasMatch;
+        },
+
+        /**
+         * 获取下拉框值
+         * 如果值为空返回null
+         * @returns {} 当前下拉框值{mcSelectValue:隐藏字段值,txt:文本值}
+         */
+        getSelectedValue: function () {
+            var _mcSelectValue = $targetInput.val();
+            var _txt = $targetDiv.text();
+            return {
+                mcSelectValue: Mc.Util.isNull(_mcSelectValue) ? null : _mcSelectValue,
+                txt: Mc.Util.isNull(_txt) ? null : _txt
+            }
+        },
+        /**
+         * 获取候选项个数
+         * @returns {} 候选项个数
+         */
+        getOptionLength: function () {
+            return $targetLi.length;
+        },
+
+        /**
+         * 添加候选项(单个)
+         * 该添加只有在调用updateSelectBox()后才应用到选择框
+         * @param {} txt 候选项显示文字
+         * @param {} mcSelectValue 候选项隐藏判别字段
+         * @returns {} 
+         */
+        addOption: function (txt, mcSelectValue) {
+            tempAddOptionTxt.push(txt);
+            tempAddOptionValue.push(mcSelectValue);
+        },
+        /**
+         * 添加候选项(多个)
+         * @param {} txtList 候选项显示文字数组
+         * @param {} mcSelectValueList 候选项隐藏判别字段数组
+         * @returns {} 
+         */
+        addOptionList: function (txtList, mcSelectValueList) {
+            add(txtList, mcSelectValueList);
+        },
+
+        /**
+         * 删除候选项(单个)
+         * @param {} index 候选项索引值
+         * @returns {} 
+         */
+        removeOption: function (index) {
+            $targetLi.eq(index).remove();
+            update();
+        },
+        /**
+         * 删除所有候选项
+         * @returns {} 
+         */
+        removeAllOption: function () {
+            $targetUl.html("");
+            update();
+        },
+
+        /**
+         * 更新下拉选择框
+         * 把之前调用addOption()方法添加的元素更新到下拉选择框中
+         * @returns {} 
+         */
+        updateSelectBox: function () {
+            add(tempAddOptionTxt, tempAddOptionValue);
+            //情况临时数组
+            tempAddOptionTxt = [];
+            tempAddOptionValue = [];
+        }
+    }
 }
 
 /**
@@ -998,14 +1231,14 @@ Mc.Util.isNumber = function (obj) {
 Mc.Util.String.notNullOrEmpty = function (str) {
     var item, _i, _len;
     if (str !== null && str.length > 0) {
-		for (_i = 0, _len = str.length; _i < _len; _i++) {
-        	item = str[_i];
-        	if (!item) {
-          		return false;
-        	}
-		}
+        for (_i = 0, _len = str.length; _i < _len; _i++) {
+            item = str[_i];
+            if (!item) {
+                return false;
+            }
+        }
     } else {
-      	return false;
+        return false;
     }
     return true;
 };
@@ -1016,7 +1249,7 @@ Mc.Util.String.notNullOrEmpty = function (str) {
  * @return {Boolean}     [check str if it length === 1]
  */
 Mc.Util.String.isOnlyOne = function (str) {
-	return str instanceof Array === false && str;
+    return str instanceof Array === false && str;
 };
 
 /**
@@ -1027,8 +1260,8 @@ Mc.Util.String.isOnlyOne = function (str) {
 Mc.Util.Check.checkPhoneCode = function (phoneCode) {
     var reg;
     if (Baby.Util.String.isOnlyOne(phoneCode)) {
-    	reg = /^((\(\d{3}\))|(\d{3}\-))?13\d{9}|14[57]\d{8}|15\d{9}|18\d{9}|17\d{9}$/;
-    	return phoneCode.length === 11 && reg.test(phoneCode);
+        reg = /^((\(\d{3}\))|(\d{3}\-))?13\d{9}|14[57]\d{8}|15\d{9}|18\d{9}|17\d{9}$/;
+        return phoneCode.length === 11 && reg.test(phoneCode);
     }
     return false;
 };
@@ -1138,7 +1371,7 @@ Mc.Util.String.getStrTrueLength = function (str) {
 };
 
 
-
+//@deprecated
 //弹出层(废弃)
 //Version 1.3.2
 //Auther Zero
