@@ -1026,7 +1026,7 @@ Mc.Util.String.isOnlyOne = function (str) {
  */
 Mc.Util.Check.checkPhoneCode = function (phoneCode) {
     var reg;
-    if (Baby.Util.String.isOnlyOne(phoneCode)) {
+    if (Mc.Util.String.isOnlyOne(phoneCode)) {
     	reg = /^((\(\d{3}\))|(\d{3}\-))?13\d{9}|14[57]\d{8}|15\d{9}|18\d{9}|17\d{9}$/;
     	return phoneCode.length === 11 && reg.test(phoneCode);
     }
