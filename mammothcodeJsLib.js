@@ -1,5 +1,7 @@
-//mammothcodeCoreJsLib
-//version 0.2.5
+﻿//MammothcodeCoreJsLib
+//Version 0.2.7.0
+//Date 2015年12月5日16:09:06
+//Edit Zero
 
 //======= namespacep START=======//
 var Mc = {}; //曼码JsLib
@@ -14,6 +16,395 @@ Mc.Util.Date = {}; //日期时间类
 Mc.Util.String = {}; //字符串类
 Mc.Util.Uri = {}; //uri类
 //======= namespace END =======//
+
+//=== Js 原生扩展 START ===//
+
+//=== Js 原生扩展 END ===//
+
+//=== JQuery 扩展 START ===//
+/**
+ * jQuery ajax 重写
+ * version 1.1
+ * Update 2015年11月19日09:47:28
+ * Author Zero
+ */
+(function ($) {
+    // 备份jquery的ajax方法
+    var _ajax = $.ajax;
+    // 重写ajax方法
+    $.ajax = function (opt) {
+        var _success = opt && opt.success || function (a, b) { };
+        var _fail = opt && opt.fail || function (a, b) { };
+        var _opt = $.extend(opt, {
+            success: function (json, textStatus) {
+                var data = JSON.parse(json);
+                var resultData = JSON.parse(data.response.result);
+                if (data.response.state == "success") { //返回数据
+                    _success(resultData, textStatus);
+                } else if (data.response.state == "jump") { //重定向
+                    window.location.href = resultData.uri;
+                    return;
+                } else if (data.response.state == "fail") { //请求失败
+                    _fail(data.response.msg, resultData);
+                }
+            }
+        });
+        _ajax(_opt);
+    };
+})(jQuery);
+/**
+ * 倒计时
+ * version 1.0
+ * Author Zero
+ */
+(function ($) {
+    var td = {
+        index: 0, //定时器index
+        isStart: [], //倒计时是否开始
+        interValObj: [], //倒计时的定时器对象
+        //初始化
+        init: function (obj, args) {
+            return (function () {
+                td.start(obj, args);
+            })();
+        },
+        //开始倒计时
+        start: function (obj, args) {
+            var index = td.index;
+            if (!td.isStart[index]) {
+                td.isStart[index] = true;
+                if (typeof (args.startCallback) == "function") args.startCallback(); //开始节点回调函数
+                td.interValObj[index] = window.setInterval(function () {
+                    if (args.fixTime <= 0) {
+                        window.clearInterval(td.interValObj[index]);
+                        obj.html(args.defaultTxt);
+                        if (typeof (args.endCallback) == "function") args.endCallback(); //结束节点回调函数
+                        td.isStart[index] = false;
+                    } else {
+                        args.fixTime--;
+                        obj.html(td.format(args));
+                    }
+                }, 1000);
+                td.index++;
+            }
+        },
+        //格式化
+        format: function (args) {
+            var sec = new Date(parseInt(args.fixTime) * 1000).getTime();
+            var d = parseInt(sec / 1000 / 60 / 60 / 24);
+            var H = parseInt(sec / 1000 / 60 / 60 % 24);
+            var m = parseInt(sec / 1000 / 60 % 60);
+            var s = parseInt(sec / 1000 % 60);
+            var format = args.timeFormat;
+            if (/(d+天).*?(H+时).*?(m+分).*?(s+秒)/.test(format)) {
+                format = format.replace(RegExp.$1, d == 0 ? "" : d + "天");
+                format = format.replace(RegExp.$2, H == 0 ? "" : H + "时");
+                format = format.replace(RegExp.$3, m == 0 ? "" : m + "分");
+                format = format.replace(RegExp.$4, s == 0 ? "" : s + "秒");
+            }
+            return format;
+        }
+    }
+    $.fn.timeCountDown = function (options) {
+        var args = $.extend({
+            fixTime: 60, //时间
+            timeFormat: "dd天HH时mm分ss秒", //计时格式化字符串
+            //timeFormat: "yyyy年MM月dd天HH时mm分ss秒", //计时格式化字符串
+            startCallback: function () { }, //开始倒计时回调函数
+            endCallback: function () { }, //结束倒计时回调函数
+            defaultTxt: "倒计时已结束" //默认显示文字
+        }, options);
+        td.init(this, args);
+    };
+})(jQuery);
+/**
+ * 下拉分页
+ * version 1.4
+ * Update 2015年11月14日16:01:53
+ * Author Zero
+ */
+(function ($) {
+    //dl 为 dropLoad缩写
+    var dl = {
+        dlData: null,
+        //获取参数
+        getArgs: function (obj) {
+            dl.dlData = $(obj).prop("dl"); //获取参数
+        },
+        //初始化
+        init: function (obj, args) {
+            return (function () {
+                $(obj).prop("dl", { //初始化参数
+                    isAjax: false, //是否正在ajax
+                    pageIndex: 0, //当前页码
+                    loadedItem: null, //所有加载项
+                    lastItem: null //已加载项的最后一项
+                });
+                dl.getArgs(obj); //获取参数
+                if (args.isLoadFirst) { //如果要自动加载第一页
+                    dl.ajaxNewData(obj, args, 0); //加载第一页数据
+                } else {
+                    dl.dlData.pageIndex = 1; //默认已加载完成第一页
+                }
+                if (args.touchOptimize) { //如果启用触屏优化则添加touchmove事件
+                    //移动端,touchmove事件
+                    $(args.scrollItem).off('touchmove').on('touchmove', function () {
+                        dl.pageDown(obj, args);
+                    });
+                }
+                //PC端,scroll事件
+                $(args.scrollItem).off('scroll').on('scroll', function () {
+                    dl.pageDown(obj, args);
+                });
+                dl.dlData.loadedItem = obj.find(args.loadItem); //选中所有已加载项
+                dl.dlData.lastItem = dl.dlData.loadedItem.eq(dl.dlData.loadedItem.length - 1); //选中初始的已经加载项的最后一项
+            })();
+        },
+        //滚动下拉触发事件
+        pageDown: function (obj, args) {
+            //如果没有进行中的请求并且符合[触发条件]则请求
+            if (!dl.dlData.isAjax) {
+                //[触发条件]如果最后一项存在并且最后一项显示在页面中则请求
+                if (dl.dlData.lastItem && dl.dlData.lastItem.offset().top + dl.dlData.lastItem.height() - $(window).scrollTop() < $(window).height()) {
+                    dl.dlData.isAjax = true; //改变标记变量值(防止多重请求)
+                    var loadNumber = dl.dlData.loadedItem.length; //已加载项总数
+                    dl.dlData.pageIndex = Math.ceil(loadNumber / args.pageSize) + 1; //计算当前页码
+                    dl.ajaxNewData(obj, args, loadNumber);
+                }
+            }
+        },
+        //请求新的数据
+        //loadNumber 已加载项总数
+        ajaxNewData: function (obj, args, loadNumber) {
+            $.ajax({
+                type: args.type,
+                url: args.url,
+                data: $.extend({
+                    "pageSize": args.pageSize, //分页数
+                    "pageIndex": dl.dlData.pageIndex //当前页页码
+                }, args.data),
+                async: args.async,
+                success: function (result) {
+                    args.success.call(obj, result); //success回调
+                    dl.dlData.loadedItem = obj.find(args.loadItem); //选中所有已加载项
+                    dl.dlData.lastItem = dl.dlData.loadedItem.eq(dl.dlData.loadedItem.length - 1); //更新最后一项
+                    if (result.allCount <= loadNumber) {
+                        //如果没有更多
+                        dl.dlData.isAjax = true;
+                        args.noMore.call(obj, result); //noMore回调
+                    } else {
+                        //还有更多
+                        dl.dlData.isAjax = false;
+                    }
+                },
+                beforeSend: function () {
+                    dl.dlData.isAjax = true;
+                    args.beforeSend.call(obj); //beforeSend回调
+                }
+            });
+        }
+    }
+    $.fn.dropDownLoad = function (options) {
+        var args = $.extend({
+            scrollItem: document,
+            loadItem: "li", //加载项选择器
+            pageSize: 15, //分页数
+            isLoadFirst: false, //是否自动加载第一页
+            touchOptimize: false, //触屏优化
+            //ajax参数封装
+            type: "post",
+            async: true,
+            url: "", //请求的url
+            data: {}, //控制器参数
+            success: function () { },
+            beforeSend: function () { },
+            noMore: function () { }
+        }, options);
+        dl.init(this, args);
+        dl.obj = this;
+    }
+})(jQuery);
+/**
+ * 点击分页
+ * version 1.3
+ * Update 2015年11月24日00:05:50
+ * Author Zero
+ */
+(function ($) {
+    var ms = {
+        msData: null,
+        //获取参数
+        getArgs: function (obj) {
+            ms.msData = $(obj).prop("ms"); //获取参数
+        },
+        //初始化
+        init: function (obj, args) {
+            return (function () {
+                $(obj).prop("ms", { //初始化参数
+                    isAjax: false, //是否正在ajax
+                    pageCount: 0, //总页码数
+                    pageIndex: 1 //当前页码
+                });
+                ms.getArgs(obj); //获取参数
+                if (args.isLoadFirst) { //如果要自动加载第一页
+                    ms.ajaxNewData(obj, $.extend(args, {
+                        async: false
+                    })); //加载第一页数据
+                } else {
+                    ms.msData.pageCount = Math.ceil(args.allCount / args.pageSize); //默认已加载完成第一页,总页数使用参数值
+                }
+                if (ms.msData.pageCount > 0) { //判断是否有分页
+                    ms.fillHtml(obj, { "current": ms.msData.pageIndex, "pageCount": ms.msData.pageCount });
+                    ms.bindEvent(obj, args);
+                }
+            })();
+        },
+        //填充html
+        fillHtml: function (obj, args) {
+            return (function () {
+                //obj.html('<div class="item fp btn firstPage"><span>首页</span></div>');
+                obj.empty();
+                //上一页
+                if (args.current > 1) {
+                    obj.append('<div class="item fp btn prevPage"><span><</span></div>');
+                } else {
+                    obj.remove('.prevPage');
+                    obj.append('<div class="item fp btn disable"><span><</span></div>');
+                }
+                //中间页码
+                if (args.current != 1 && args.current >= 4 && args.pageCount != 4) {
+                    obj.append('<div class="item fp tcdNumber"><span>' + 1 + '</span></div>');
+                }
+                if (args.current - 2 > 2 && args.current <= args.pageCount && args.pageCount > 5) {
+                    obj.append('<div class="item fp ellipsis"><span>...</span></div>');
+                }
+                var start = args.current - 2, end = args.current + 2;
+                if ((start > 1 && args.current < 4) || args.current == 1) {
+                    end++;
+                }
+                if (args.current > args.pageCount - 4 && args.current >= args.pageCount) {
+                    start--;
+                }
+                for (; start <= end; start++) {
+                    if (start <= args.pageCount && start >= 1) {
+                        if (start != args.current) {
+                            obj.append('<div class="item fp tcdNumber"><span>' + start + '</span></div>');
+                        } else {
+                            obj.append('<div class="item fp active"><span>' + start + '</span></div>');
+                        }
+                    }
+                }
+                if (args.current + 2 < args.pageCount - 1 && args.current >= 1 && args.pageCount > 5) {
+                    obj.append('<div class="item fp ellipsis"><span>...</span></div>');
+                }
+                if (args.current != args.pageCount && args.current < args.pageCount - 2 && args.pageCount != 4) {
+                    obj.append('<div class="item fp tcdNumber"><span>' + args.pageCount + '</span></div>');
+                }
+                //下一页
+                if (args.current < args.pageCount) {
+                    obj.append('<div class="item fp btn nextPage"><span>></span></div>');
+                } else {
+                    obj.remove('.nextPage');
+                    obj.append('<div class="item fp btn disable"><span>></span></div>');
+                }
+                //obj.append('<div class="item fp btn lastPage"><span>尾页</span></div>');
+            })();
+        },
+        //绑定事件
+        bindEvent: function (obj, args) {
+            obj.off("click");
+            return (function () {
+                obj.on("click", "div.tcdNumber", function () {
+                    var current = parseInt($(this).text());
+                    ms.fillHtml(obj, { "current": current, "pageCount": ms.msData.pageCount });
+                    if (typeof (args.backFn) == "function") {
+                        //args.backFn(current);
+                    }
+                    ms.msData.pageIndex = current;
+                    ms.ajaxNewData(obj, args);
+                });
+                //上一页
+                obj.on("click", "div.prevPage", function () {
+                    var current = parseInt(obj.find(".item.active").text());
+                    ms.fillHtml(obj, { "current": current - 1, "pageCount": ms.msData.pageCount });
+                    if (typeof (args.backFn) == "function") {
+                        //args.backFn(current - 1);
+                    }
+                    ms.msData.pageIndex = current - 1;
+                    ms.ajaxNewData(obj, args);
+                });
+                //下一页
+                obj.on("click", "div.nextPage", function () {
+                    var current = parseInt(obj.find(".item.active").text());
+                    ms.fillHtml(obj, { "current": current + 1, "pageCount": ms.msData.pageCount });
+                    if (typeof (args.backFn) == "function") {
+                        //args.backFn(current + 1);
+                    }
+                    ms.msData.pageIndex = current + 1;
+                    ms.ajaxNewData(obj, args);
+                });
+                //首页
+                obj.on("click", "div.firstPage", function () {
+                    var current = 0;
+                    ms.fillHtml(obj, { "current": current + 1, "pageCount": ms.msData.pageCount });
+                    if (typeof (args.backFn) == "function") {
+                        //args.backFn(current + 1);
+                    }
+                    ms.msData.pageIndex = current + 1;
+                    ms.ajaxNewData(obj, args);
+                });
+                //尾页
+                obj.on("click", "div.lastPage", function () {
+                    var current = args.pageCount - 1;
+                    ms.fillHtml(obj, { "current": current + 1, "pageCount": ms.msData.pageCount });
+                    if (typeof (args.backFn) == "function") {
+                        //args.backFn(current + 1);
+                    }
+                    ms.msData.pageIndex = current + 1;
+                    ms.ajaxNewData(obj, args);
+                });
+            })();
+        },
+        //请求新的数据
+        ajaxNewData: function (obj, args) {
+            $.ajax({
+                type: args.type,
+                url: args.url,
+                data: $.extend({
+                    "pageSize": args.pageSize, //分页数
+                    "pageIndex": ms.msData.pageIndex //当前页页码
+                }, args.data),
+                async: args.async,
+                success: function (result) {
+                    ms.msData.pageCount = Math.ceil(result.allCount / args.pageSize);; //获得总页数
+                    args.success.call(obj, result); //success回调
+                },
+                beforeSend: function () {
+                    ms.msData.isAjax = true;
+                    args.beforeSend.call(obj); //beforeSend回调
+                }
+            });
+        }
+    }
+    $.fn.createPage = function (options) {
+        var args = $.extend({
+            allCount: 10, //总数量
+            //current: 1, //当前页码
+            pageSize: 12, //每页个数
+            isLoadFirst: true, //是否自动加载第一页
+            //backFn: function () { }, //回调函数
+            //ajax参数封装
+            type: "post",
+            async: true,
+            url: "", //请求的url
+            data: {}, //控制器参数
+            success: function () { },
+            beforeSend: function () { }
+        }, options);
+        ms.init(this, args);
+    }
+})(jQuery);
+//=== JQuery 扩展 END ===//
 
 /**
  * [Tip - 提示框:弹出一个操作提示,在tip_live时间(单位毫秒)内存在,然后消失,无回调函数]
@@ -36,7 +427,7 @@ Mc.App.Pop.Tip = function (options) {
     var popId = new Date().getTime();
     var popHtml = function typeTipHtmlCreate() {
         var html = "";
-        html += "<div id='tip" + popId + "' class='dialog-position-wrap' style='display:none;'>";
+        html += "<div id='tip" + popId + "' class='pop-position-wrap' style='display:none;'>";
         html += "<div class='tip-wrap'>";
         html += "<div class='tip-content'>";
         html += settings.txtContent;
@@ -59,8 +450,8 @@ Mc.App.Pop.Tip = function (options) {
 /**
  * [Dialog 对话框]
  * Author: Zero
- * Update: 2015.8.13
- * Version: 0.7
+ * Update: 2015年12月3日15:51:04
+ * Version: 0.9
  * [wrapClass - Pop 层外部包裹class | 默认 ""] 
  * [popHtml - Pop html | 默认""] 
  * [iniCallback - Pop初始化回调函数 | 默认""] 
@@ -72,6 +463,9 @@ Mc.App.Pop.Tip = function (options) {
  * [rightBtnClass - 右侧按钮class | 默认 ""] 
  * [rightBtnContent - 右侧按钮文字 | 默认 取消] 
  * [rightBtnCallback - 右侧按钮回调函数 | 默认 null] 
+ * [closeBtn - 是否有关闭按钮 | 默认 true] 
+ * [closeBtnClass - 关闭按钮class | 默认""] 
+ * [closeBtnHtml - 关闭按钮HTML | 默认""] 
  * [hasBg - 是否有bg | 默认 true] 
  * [bgClose - 点击bg关闭弹出层 | 默认false] 
  * [bgCloseCallback - bg点击关闭回调函数 | 默认 null] 
@@ -95,6 +489,9 @@ Mc.Pc.Pop.Dialog = function (options) {
         rightBtnClass: "", //右侧按钮class | 默认 ""
         rightBtnContent: "取消", //右侧按钮文字 | 默认 取消
         rightBtnCallback: null, //右侧按钮回调函数 | 默认 null
+        closeBtn: true, //是否有关闭按钮 | 默认 true
+        closeBtnClass: "", //关闭按钮class | 默认""
+        //closeBtnHtml: "", //关闭按钮HTML | 默认""
         hasBg: true, //是否有bg | 默认 true
         bgClose: false, //点击bg关闭弹出层 | 默认false
         bgCloseCallback: null, //bg点击关闭回调函数 | 默认 null
@@ -110,6 +507,8 @@ Mc.Pc.Pop.Dialog = function (options) {
         var html = "";
         html += "<div id='Dialog" + popId + "' class='pop-position-wrap' style='display:none;'>";
         html += "<div class='pop-wrap " + settings.wrapClass + "'>";
+        //关闭按钮
+        if (settings.closeBtn) html += "<div id='close_" + popId + "' class='pop-close " + settings.closeBtnClass + "' onclick='(function(){})'></div>"; //Beta 修复关闭按钮在iphone下无法点击
         //Pop html
         html += settings.popHtml;
         //弹出层btn构造
@@ -144,20 +543,30 @@ Mc.Pc.Pop.Dialog = function (options) {
             });
         }
     }
-    //左侧按钮点击事件
-    $popObj.on("click", "#dialog_L_" + popId, function () {
-        //回调函数为空->关闭||回调函数不为空判断是否为函数->true->执行函数->函数返回值为false不关闭弹出层,否则关闭弹出层
-        if (settings.leftBtnCallback == null || typeof (settings.leftBtnCallback) === "function" && settings.leftBtnCallback() !== false) {
+    if (settings.leftBtn) {
+        //左侧按钮点击事件
+        $popObj.on("click", "#dialog_L_" + popId, function () {
+            //回调函数为空->关闭||回调函数不为空判断是否为函数->true->执行函数->函数返回值为false不关闭弹出层,否则关闭弹出层
+            if (settings.leftBtnCallback == null || typeof (settings.leftBtnCallback) === "function" && settings.leftBtnCallback() !== false) {
+                popClose();
+            }
+        });
+    }
+    if (settings.rightBtn) {
+        //右侧按钮点击事件
+        $popObj.on("click", "#dialog_R_" + popId, function () {
+            //回调函数为空->关闭||回调函数不为空判断是否为函数->true->执行函数->函数返回值为false不关闭弹出层,否则关闭弹出层
+            if (settings.rightBtnCallback == null || typeof (settings.rightBtnCallback) === "function" && settings.rightBtnCallback() !== false) {
+                popClose();
+            }
+        });
+    }
+    if (settings.closeBtn) {
+        //关闭按钮点击事件
+        $popObj.on("click", "#close_" + popId, function () {
             popClose();
-        }
-    });
-    //右侧按钮点击事件
-    $popObj.on("click", "#dialog_R_" + popId, function () {
-        //回调函数为空->关闭||回调函数不为空判断是否为函数->true->执行函数->函数返回值为false不关闭弹出层,否则关闭弹出层
-        if (settings.rightBtnCallback == null || typeof (settings.rightBtnCallback) === "function" && settings.rightBtnCallback() !== false) {
-            popClose();
-        }
-    });
+        });
+    }
     //背景关闭事件
     if (settings.bgClose) {
         $popObj.on("click", "#bg_" + popId, function () {
@@ -679,6 +1088,7 @@ Mc.Util.selectMenu = function (selector, callback) {
     var $selectorDiv = $(selector).find("div");
     var $selectorUl = $selector.find("ul");
     $selector.on("click", function (ev) {
+        $selector.trigger("selectBoxClick");
         var $this = $(this);
         if ($this.hasClass("open")) {
             $this.removeClass("open");
@@ -708,11 +1118,11 @@ Mc.Util.selectMenu = function (selector, callback) {
 
 /**
  * [工具函数-自定义下拉选择框v2]
- * [last alter 2015-9-6 16:18:09 by zero]
+ * [last alter 2015-11-20 07:32:54 by zero]
  * [target - selectBox的jQ选择器 | 默认 ""]
  * [group - 分组-组值 | 默认分组 "McSelectBox"]
  * [callback - 候选项点击回调函数 | 默认 null]
- * @version 1.1
+ * @version 1.3
  * @author Zero
  * @param {} options 
  * @returns {} 
@@ -728,43 +1138,47 @@ Mc.Util.selectBox = function (options) {
     var $targetDiv = $target.find("div"); //下拉框div对象(存储选择项文本内容)
     var $targetUl = $target.find("ul"); //下拉框ul对象(候选项列表)
     var $targetLi = $targetUl.find("li"); //下拉框候选项
-    var tempAddOptionTxt = new Array(); //单项新增的时候的临时存储数组(存储选择项文本内容)
-    var tempAddOptionValue = new Array(); //单项新增的时候的临时存储数组(存储选择项mc-select-value字段的值)
+    var tempAddOption = new Array(); //单项新增的时候的临时存储数组 - 结构["txt","mcSelectValue"]
+    //var tempAddOptionTxt = new Array(); //单项新增的时候的临时存储数组(存储选择项文本内容)
+    //var tempAddOptionValue = new Array(); //单项新增的时候的临时存储数组(存储选择项mc-select-value字段的值)
     //初始化
-    function selectBoxIni() {
+    (function selectBoxIni() {
         //隐藏下拉框
         if (!$target.hasClass("mc-active")) {
             $targetUl.hide();
         }
         //分组
         $target.attr("mc-group", settings.group);
-    }
-    $(function () {
-        selectBoxIni();
-    });
-    //设置下拉框当前值
-    function setValue(txt, mcSelectValue) {
-        $targetInput.val(mcSelectValue);
-        $targetDiv.text(txt);
+    })();
+    /**
+     * 设置下拉框当前值
+     * @param {} option ["txt","mcSelectValue"]
+     * @param {} triggerCallback 是否触发回调
+     * @returns {} 
+     */
+    function setValue(option, triggerCallback) {
+        $targetInput.val(option[1]); //mcSelectValue
+        $targetDiv.text(option[0]); //txt
+        if (triggerCallback) {
+            settings.callback != null && settings.callback(option[1], option[0]); //触发回调函数
+        }
     }
     //更新下拉候选项
     function update() {
         $targetLi = $targetUl.find("li");
     }
     //添加候选项
-    function add(txtList, mcSelectValueList) {
+    function add(optionList) {
         var optionHtml = "";
-        //todo 进行是否为数组判断,及两个数组长度匹配判断
-        var optionLength = mcSelectValueList.length > txtList.length ? mcSelectValueList.length : txtList.length;
-        for (var i = 0; i < optionLength; i++) {
-            optionHtml += '<li mc-select-value="' + mcSelectValueList[i] + '">' + txtList[i] + '</li>';
+        for (var i = 0; i < optionList.length; i++) {
+            optionHtml += '<li mc-select-value="' + optionList[i][1] + '">' + optionList[i][0] + '</li>';
         }
         $targetUl.append(optionHtml);
         update();
     }
     //绑定下拉事件
     $target.on("click", function (ev) {
-        if ($targetLi.length) {
+        if ($targetLi.length) { //判断是否有候选项
             var $this = $(this);
             if ($this.hasClass("mc-active")) {
                 $targetUl.hide();
@@ -783,8 +1197,8 @@ Mc.Util.selectBox = function (options) {
         var $this = $(this); //点击项
         var txt = $this.text(); //点击项txt
         var mcSelectValue = $this.attr("mc-select-value"); //点击项mc-select-value
-        setValue(txt, mcSelectValue); //设置下拉框值
-        if (settings.callback != null) settings.callback(this, mcSelectValue);
+        setValue([txt, mcSelectValue]); //设置下拉框值
+        settings.callback != null && settings.callback(mcSelectValue, txt); //触发回调函数
         $targetUl.hide();
         $target.removeClass("mc-active");
         ev.stopPropagation();
@@ -809,38 +1223,43 @@ Mc.Util.selectBox = function (options) {
 
         /**
          * 设置下拉框默认值
-         * @param {} txt 默认值文本值
-         * @param {} mcSelectValue 默认值隐藏字段值
+         * @param {} option [txt, mcSelectValue]
          * @returns {} 
          */
-        setDefaultValue: function (txt, mcSelectValue) {
-            setValue(txt, mcSelectValue); //设置下拉框值
+        setDefaultValue: function (option) {
+            setValue(option); //设置下拉框值
         },
 
         /**
          * 根据索引设置索引项为当前项
          * @param {} index 索引值
+         * @param {} triggerCallback 是否触发回调函数
          * @returns {} 
          */
-        setSelect: function (index) {
-            //todo 索引范围判断
+        setSelect: function (index, triggerCallback) {
             var $select = $targetLi.eq(index);
-            var mcSelectValue = $select.attr("mc-select-value"); //候选项mc-select-value
-            var txt = $select.text(); //候选项txt
-            setValue(txt, mcSelectValue); //设置下拉框值
+            if ($select.length) { //如果index超出索引,即不存在项则返回false
+                var mcSelectValue = $select.attr("mc-select-value"); //候选项mc-select-value
+                var txt = $select.text(); //候选项txt
+                setValue([txt, mcSelectValue], triggerCallback); //设置下拉框值
+            } else {
+                return false;
+            }
         },
         /**
          * 根据文本值设置匹配项为当前项
+         * 多项匹配则匹配index最小
          * @param {} txt 文本值
+         * @param {} triggerCallback 是否触发回调函数
          * @returns {} true 找到匹配项, false 未找到匹配项
          */
-        setSelectByTxt: function (txt) {
+        setSelectByTxt: function (txt, triggerCallback) {
             var _this = this;
             var hasMatch = false;
             $targetLi.each(function (i, val) {
                 if ($(val).text() == txt) {
                     hasMatch = true;
-                    _this.setSelect(i);
+                    _this.setSelect(i, triggerCallback);
                     return false;
                 }
             });
@@ -848,16 +1267,18 @@ Mc.Util.selectBox = function (options) {
         },
         /**
          * 根据隐藏字段值设置匹配项为当前项
+         * 多项匹配则匹配index最小
          * @param {} mcSelectValue 隐藏字段值
+         * @param {} triggerCallback 是否触发回调函数
          * @returns {} true 找到匹配项, false 未找到匹配项
          */
-        setSelectByValue: function (mcSelectValue) {
+        setSelectByValue: function (mcSelectValue, triggerCallback) {
             var _this = this;
             var hasMatch = false;
             $targetLi.each(function (i, val) {
                 if ($(val).attr("mc-select-value") == mcSelectValue) {
                     hasMatch = true;
-                    _this.setSelect(i);
+                    _this.setSelect(i, triggerCallback); //todo 需判断setSelect的返回值
                     return false;
                 }
             });
@@ -893,17 +1314,29 @@ Mc.Util.selectBox = function (options) {
          * @returns {} 
          */
         addOption: function (txt, mcSelectValue) {
-            tempAddOptionTxt.push(txt);
-            tempAddOptionValue.push(mcSelectValue);
+            tempAddOption.push([txt, mcSelectValue]);
         },
         /**
          * 添加候选项(多个)
-         * @param {} txtList 候选项显示文字数组
-         * @param {} mcSelectValueList 候选项隐藏判别字段数组
+         * @param  {} optionList 候选项二维数组 [["txt","mcSelectValue"],["txt","mcSelectValue"]]
+         * @param {} txt 候选项显示文字数组
+         * @param {} mcSelectValue 候选项隐藏判别字段数组
          * @returns {} 
          */
-        addOptionList: function (txtList, mcSelectValueList) {
-            add(txtList, mcSelectValueList);
+        addOptionList: function (optionList) {
+            add(optionList);
+        },
+
+        /**
+        * 改变候选项(多个)
+        * @param  {} optionList 候选项二维数组 [["txt","mcSelectValue"],["txt","mcSelectValue"]]
+        * @param {} txt 候选项显示文字数组
+        * @param {} mcSelectValue 候选项隐藏判别字段数组
+        * @returns {} 
+        */
+        changeOptionList: function (optionList) {
+            $targetUl.html("");
+            add(optionList);
         },
 
         /**
@@ -923,6 +1356,15 @@ Mc.Util.selectBox = function (options) {
             $targetUl.html("");
             update();
         },
+        /**
+        * 清空下拉选择框
+        * @returns {} 
+        */
+        empty: function () {
+            $targetUl.html("");
+            update();
+            setValue(["", ""], false);
+        },
 
         /**
          * 更新下拉选择框
@@ -930,46 +1372,91 @@ Mc.Util.selectBox = function (options) {
          * @returns {} 
          */
         updateSelectBox: function () {
-            add(tempAddOptionTxt, tempAddOptionValue);
-            //情况临时数组
-            tempAddOptionTxt = [];
-            tempAddOptionValue = [];
+            add(tempAddOption);
+            //清空临时数组
+            tempAddOption = [];
         }
     }
 }
 
 /**
- * [工具函数-特效变化]
- * [target - 特效变化父级jQ选择器(通过事件代理触发) | 默认 "document"]
+ * [工具函数-特效变化] 
+ * [Author: zero] 
+ * [Version: 1.3] 
+ * [Update: 2015年12月5日16:07:35] 
+ * [target - 特效变化父级jQ选择器(通过事件代理触发) | 默认 "document"] 
  * [event - 触发事件 | 默认click | 可选项 {
  *     click:点击触发,
  *     hover:鼠标移入/移出各触发一次,
  *     mouseover:鼠标移入触发,
  *     mouseout:鼠标移出触发
- * }]
+ * }] 
  * [effect - 特效形式 | 默认SH | 可选项 { 
  *     SH:show/hide,
  *     FIO:fadeIn/fadeOut,
  *     SDU:slideDown/slideUp
- * }]
- * [onlyActive - 同一时间只能有一个激活 | 默认false]
- * [lessOneActive - 至少有一个处于激活状态 | 默认false]
- * [effectSpeed - 特效变化时间(毫秒) | 默认 200]
+ * }] 
+ * [onlyActive - 同一时间只能有一个激活 | 默认 false] 
+ * [lessOneActive - 至少有一个处于激活状态 | 默认 false] 
+ * [changeCallBack - 切换改变的回调函数 | 默认 null] 
+ * [effectSpeed - 特效变化时间(毫秒) | 默认 200] 
  * [常见用法 {
  *     单页切换: onlyActive:true,lessOneActive:true
  * }]
- * @param {} options 
+ * @param {} [event-触发事件|默认click|可选项];点击触发;hover;鼠标移入/移出各触发一次;mouseover;鼠标移入触发;mouseout;鼠标移出触发;
  * @returns {} 
  */
 Mc.Util.EffectChange = function (options) {
     var settings = $.extend({
         target: "document", //特效变化父级jQ选择器(通过事件代理触发) | 默认 "document"
-        event: "click", //触发事件 | 默认click {click:点击触发,hover:鼠标移入/移出各触发一次,mouseover:鼠标移入触发,mouseout:鼠标移出触发}
-        effect: "SH", //特效形式 | 默认SH {SH:show/hide,FIO:fadeIn/fadeOut,SDU:slideDown/slideUp}
-        onlyActive: false, //同一时间只能有一个激活 | 默认false | Tip:如果实现单页切换,此值应为true
-        lessOneActive: false, //至少有一个处于激活状态 | 默认false | Tip:如果实现单页切换,此值应为true
+        event: "click", //触发事件 | 默认 click {click:点击触发,hover:鼠标移入/移出各触发一次,mouseover:鼠标移入触发,mouseout:鼠标移出触发}
+        effect: "SH", //特效形式 | 默认 SH {SH:show/hide,FIO:fadeIn/fadeOut,SDU:slideDown/slideUp}
+        onlyActive: false, //同一时间只能有一个激活 | 默认 false | Tip:如果实现单页切换,此值应为true
+        lessOneActive: false, //至少有一个处于激活状态 | 默认 false | Tip:如果实现单页切换,此值应为true
+        changeCallBack: null, //切换改变的回调函数 | 默认 null
         effectSpeed: 200 //特效变化时间(毫秒) | 默认 200
     }, options);
+    //特效函数列表
+    var effectFn = {
+        //=== 开始特效 START ===//
+        //显示
+        startShowHide: function (efcTarget) {
+            efcTarget.show();
+        },
+        //淡入
+        startFadeInOut: function (efcTarget) {
+            efcTarget.stop(false, true).fadeIn(settings.effectSpeed);
+        },
+        //展开
+        startSlideDownUp: function (efcTarget) {
+            efcTarget.stop(false, true).slideDown(settings.effectSpeed);
+        },
+        //=== 开始特效 END ===//
+        //=== 结束特效 START ===//
+        //隐藏
+        endShowHide: function (efcTarget) {
+            efcTarget.hide();
+        },
+        //淡出
+        endFadeInOut: function (efcTarget) {
+            efcTarget.stop(false, true).fadeOut(settings.effectSpeed);
+        },
+        //收拢
+        endSlideDownUp: function (efcTarget) {
+            efcTarget.stop(false, true).slideUp(settings.effectSpeed);
+        }
+        //=== 结束特效 END ===//
+    };
+    //开始特效对应数据列表
+    var efcStartList = {
+        "FIO": effectFn.startFadeInOut,
+        "SDU": effectFn.startSlideDownUp
+    };
+    //结束特效对应数据列表
+    var efcEndList = {
+        "FIO": effectFn.endFadeInOut,
+        "SDU": effectFn.endSlideDownUp
+    };
     //初始化
     function effectChageIni() {
         $(settings.target + " [mc-efc-page]").each(function (i, val) {
@@ -979,76 +1466,55 @@ Mc.Util.EffectChange = function (options) {
             }
         });
     }
-    $(function () {
-        effectChageIni();
-    });
-    //根据特效类型字符串映射为对应特效类型code
-    function getEfcTypeCode() {
-        if (settings.effect == "FIO") {
-            return 1;
-        } else if (settings.effect == "SDU") {
-            return 2;
-        } else {
-            return 0;
-        }
-    }
-    var effectType = getEfcTypeCode(); //获取特效类型编号
-    //开始特效
-    function effectStart(efcTarget) {
-        efcTarget.addClass("mc-active");
-        switch (effectType) {
-            case 0:
-                efcTarget.show();
-                break;
-            case 1:
-                efcTarget.fadeIn(settings.effectSpeed);
-                break;
-            case 2:
-                efcTarget.slideDown(settings.effectSpeed);
-                break;
-        }
-    }
-    //结束特效
-    function effectEnd(efcTarget) {
-        efcTarget.removeClass("mc-active");
-        switch (effectType) {
-            case 0:
-                efcTarget.hide();
-                break;
-            case 1:
-                efcTarget.fadeOut(settings.effectSpeed);
-                break;
-            case 2:
-                efcTarget.slideUp(settings.effectSpeed);
-                break;
-        }
-    }
-    var $targetF = $(settings.target); //获取绑定对象
-    $targetF.on(settings.event, "[mc-efc-btn]", function () {
-        var $this = $(this); //当前对象
-        var $targetData = $this.attr("mc-efc-btn"); //当前对象目标数据(用来选取当前对象目标)
-        var $target = $targetF.find("[mc-efc-page=" + $targetData + "]"); //当前对象目标
-        var $activeBtn = $targetF.find("[mc-efc-btn].mc-active"); //处于激活状态的选项
-        var $activePage = $targetF.find("[mc-efc-page].mc-active"); //处于激活状态的选项目标
+    (function () {
+        effectChageIni(); //初始化
+        var $targetF = $(settings.target); //获取绑定对象
+        var $efcBtn = $targetF.find("[mc-efc-btn]"); //所有选项
+        var $efcPage = $targetF.find("[mc-efc-page]"); //所有选项目标
         var condition1 = !settings.lessOneActive; //条件1 - 可以全处于冻结状态
-        var condition2 = $targetF.find("[mc-efc-btn].mc-active").length > 1; //条件2 - 处于激活的项多以1个(隐含条件 - 不满足条件1,即至少有一个要处于激活状态)
-        if ($this.hasClass("mc-active") && (condition1 || condition2)) {
-            //条件1 - 所有选项可以处于冻结状态
-            //条件2 - 处于激活状态的项多于1个(隐含条件 - 不满足条件1,即至少有一个要处于激活状态)
-            //如果当前项处于激活状态,并且符合条件1,2中任意一条 --> 冻结当前项
-            $this.removeClass("mc-active active"); //冻结当前项
-            effectEnd($target); //冻结当前项目标
-        } else if (!$this.hasClass("mc-active")) {
-            //不满足冻结选项条件(并且当前项处于冻结状态) --> 激活当前项
-            if (settings.onlyActive) {
-                //如果所有选项中只能激活一个选项,则关闭已激活对象,再激活当前对象
-                $activeBtn.removeClass("mc-active active"); //冻结已激活对象
-                effectEnd($activePage); //冻结已激活对象目标
-            }
-            $this.addClass("mc-active active"); //激活当前项
-            effectStart($target); //激活当前项目标
+        //开始特效
+        function effectStart(efcTarget) {
+            efcTarget.addClass("mc-active");
+            (efcStartList[settings.effect] || effectFn.startShowHide)(efcTarget);
         }
-    });
+        //结束特效
+        function effectEnd(efcTarget) {
+            efcTarget.removeClass("mc-active");
+            var efcType = "SH";
+            settings.event != "hover" && (efcType = settings.effect); //触发事件为hover时只执行hide特效
+            (efcEndList[efcType] || effectFn.endShowHide)(efcTarget);
+        }
+        $targetF.on(settings.event, "[mc-efc-btn]", function () {
+            var $this = $(this); //当前对象
+            var targetData = $this.attr("mc-efc-btn"); //当前对象目标数据(用来选取当前对象目标)
+            var $target = $efcPage.filter("[mc-efc-page=" + targetData + "]"); //当前对象目标
+            var $activeBtn = $efcBtn.filter(".mc-active"); //处于激活状态的选项
+            var $activePage = $efcPage.filter(".mc-active"); //处于激活状态的选项目标
+            var condition2 = $activeBtn.length > 1; //条件2 - 处于激活的项多以1个(隐含条件 - 不满足条件1,即至少有一个要处于激活状态)
+            if ($this.hasClass("mc-active") && (condition1 || condition2)) {
+                //回调函数为空->关闭||回调函数不为空判断是否为函数->true->执行函数->函数返回值为false不执行操作
+                if (settings.changeCallBack == null || typeof (settings.changeCallBack) === "function" && settings.changeCallBack() !== false) {
+                    //条件1 - 所有选项可以处于冻结状态
+                    //条件2 - 处于激活状态的项多于1个(隐含条件 - 不满足条件1,即至少有一个要处于激活状态)
+                    //如果当前项处于激活状态,并且符合条件1,2中任意一条 --> 冻结当前项
+                    $this.removeClass("mc-active active"); //冻结当前项
+                    effectEnd($target); //冻结当前项目标
+                }
+            } else if (!$this.hasClass("mc-active")) {
+                //回调函数为空->关闭||回调函数不为空判断是否为函数->true->执行函数->函数返回值为false不执行操作
+                if (settings.changeCallBack == null || typeof (settings.changeCallBack) === "function" && settings.changeCallBack() !== false) {
+                    //不满足冻结选项条件(并且当前项处于冻结状态) --> 激活当前项
+                    if (settings.onlyActive) {
+                        //如果所有选项中只能激活一个选项,则关闭已激活对象,再激活当前对象
+                        $activeBtn.removeClass("mc-active active"); //冻结已激活对象
+                        effectEnd($activePage); //冻结已激活对象目标
+                    }
+                    $this.addClass("mc-active active"); //激活当前项
+                    effectStart($target); //激活当前项目标
+                }
+            }
+        });
+    })();
 }
 
 /**
@@ -1259,7 +1725,7 @@ Mc.Util.String.isOnlyOne = function (str) {
  */
 Mc.Util.Check.checkPhoneCode = function (phoneCode) {
     var reg;
-    if (Baby.Util.String.isOnlyOne(phoneCode)) {
+    if (Mc.Util.String.isOnlyOne(phoneCode)) {
         reg = /^((\(\d{3}\))|(\d{3}\-))?13\d{9}|14[57]\d{8}|15\d{9}|18\d{9}|17\d{9}$/;
         return phoneCode.length === 11 && reg.test(phoneCode);
     }
@@ -1331,21 +1797,92 @@ Mc.Util.String.cmp = function (str1, str2) {
 
 /**验证url**/
 
+Mc.Util.Uri.goNextUrl = function (targetUrl) {
+    var oldUrl = Mc.Util.Uri.getSigleUrlParam("oldUrl");
+    var goUrl = "";
+    if (oldUrl != null) {
+        if (targetUrl.indexOf("?") == -1) {
+            targetUrl += "?";
+        } else {
+            targetUrl += "&";
+        }
+        //解码
+        goUrl = targetUrl + "oldUrl=" + encodeURIComponent(oldUrl);
+        window.location.href = goUrl;
+    }
+}
+/**验证url**/
+
 /**
  * [GetRequest get url param after ?]
  */
-Mc.Util.Uri.getUrlParam = function () {
+Mc.Util.Uri.getUrlParamArray = function () {
     var url = location.search; //获取url中"?"符后的字串
     var theRequest = new Object();
     if (url.indexOf("?") !== -1) {
         var str = url.substr(1);
         var strs = str.split("&");
         for (var i = 0; i < strs.length; i++) {
-            theRequest[strs[i].split("=")[0]] = unescape(strs[i].split("=")[1]);
+            theRequest[strs[i].split("=")[0]] = decodeURIComponent(strs[i].split("=")[1]);
         }
     }
     return theRequest;
 };
+/**
+ * *获取单个Url参数
+ * @returns {} 
+ */
+Mc.Util.Uri.getUrlParam = function (name) {
+    var reg = new RegExp("(^|&)" + name + "=([^&]*)(&|$)");
+    var r = window.location.search.substr(1).match(reg);
+    if (r != null) return decodeURIComponent(r[2]); return null;
+};
+/**
+ * url解密
+ * @param {编码url} url 
+ * @returns {} 
+ */
+/**
+ * 去旧地址
+ * @returns {} 
+ */
+Mc.Util.Uri.goOldUrl = function (targetUrl) {
+    var oldUrl = Mc.Util.Uri.getUrlParam("oldUrl");
+    var goUrl = "";
+    if (oldUrl != null) {
+        //解码
+        goUrl = decodeURIComponent(oldUrl);
+        window.location.href = goUrl;
+    } else {
+        if (targetUrl != null) {
+            window.location.href = targetUrl;
+        }
+    }
+}
+/**
+ * 跳转到指定地址带上本地地址
+ * @param {} goUrl 
+ * @returns {指定地址} 
+ */
+Mc.Util.Uri.goUrl = function (goUrl) {
+    goUrl = Mc.Util.Uri.getOldUrl(goUrl);
+    setTimeout(function () {
+        window.location.href = goUrl;
+    }, 1000);
+}
+/**
+ * 获取指定地址带上本地地址
+ * @param {指定地址} goUrl 
+ * @returns {} 
+ */
+Mc.Util.Uri.getOldUrl = function (goUrl) {
+    var oldUrl = encodeURIComponent(location.href);
+    if (goUrl.indexOf("?") == -1) {
+        goUrl += "?";
+    }
+    goUrl += "oldUrl=" + oldUrl;
+    return goUrl;
+}
 
 /**
  * [dateFormatter Description]
