@@ -1,6 +1,6 @@
 ﻿//MammothcodeCoreJsLib
-//Version 0.2.7.0
-//Date 2015年12月5日16:09:06
+//Version 0.2.7.1
+//Date 2016年3月15日10:08:40
 //Edit Zero
 
 //======= namespacep START=======//
@@ -15,7 +15,54 @@ Mc.Util.Check = {}; //表单验证类
 Mc.Util.Date = {}; //日期时间类
 Mc.Util.String = {}; //字符串类
 Mc.Util.Uri = {}; //uri类
+Mc.Global = {}; //全局对象
 //======= namespace END =======//
+
+/**
+ * ajax 数据请求
+ * version 1.1
+ * Update 2016年3月15日10:09:02
+ * Author Zero
+ */
+Mc.Global.mc_isAjax = [];
+Mc.Ajax = function (options) {
+    var settings = $.extend({
+        id: new Date().getTime(), //ajax的id
+        url: "",
+        data: {},
+        type: "post",
+        ansyc: true,
+        success: function () { }, //请求成功回调 [resultData, msg, textStatus]
+        fail: function () { }, //请求失败回调 [errorMsg, msg, textStatus]
+        beforeSend: function () { }
+    }, options);
+    Mc.Global.mc_isAjax[settings.id] || (Mc.Global.mc_isAjax[settings.id] = false);
+    if (!Mc.Global.mc_isAjax[settings.id]) {
+        $.ajax({
+            url: settings.url,
+            data: settings.data,
+            type: settings.type,
+            ansyc: settings.ansyc,
+            success: function (json, textStatus) {
+                Mc.Global.mc_isAjax[settings.id] = false;
+                var response = JSON.parse(json)["response"];
+                var resultData = JSON.parse(response.result);
+                if (response.state === "success") { //返回数据
+                    settings.success.call(this, resultData, response.msg, textStatus);
+                } else if (response.state === "jump") { //重定向
+                    window.location.href = resultData.uri;
+                    return;
+                } else if (response.state === "fail") { //请求失败
+                    settings.fail.call(this, response.errorMsg, response.msg, textStatus);
+                }
+            },
+            beforeSend: function () {
+                Mc.Global.mc_isAjax[settings.id] = true;
+                settings.beforeSend.call(this);
+            }
+        });
+    }
+}
 
 //=== Js 原生扩展 START ===//
 
@@ -28,7 +75,7 @@ Mc.Util.Uri = {}; //uri类
  * Update 2015年11月19日09:47:28
  * Author Zero
  */
-(function ($) {
+/*(function ($) {
     // 备份jquery的ajax方法
     var _ajax = $.ajax;
     // 重写ajax方法
@@ -51,13 +98,13 @@ Mc.Util.Uri = {}; //uri类
         });
         _ajax(_opt);
     };
-})(jQuery);
+})(jQuery);*/
 /**
  * 倒计时
  * version 1.0
  * Author Zero
  */
-(function ($) {
+; (function ($) {
     var td = {
         index: 0, //定时器index
         isStart: [], //倒计时是否开始
@@ -123,7 +170,7 @@ Mc.Util.Uri = {}; //uri类
  * Update 2015年11月14日16:01:53
  * Author Zero
  */
-(function ($) {
+; (function ($) {
     //dl 为 dropLoad缩写
     var dl = {
         dlData: null,
@@ -185,7 +232,8 @@ Mc.Util.Uri = {}; //uri类
                 }, args.data),
                 async: args.async,
                 success: function (result) {
-                    args.success.call(obj, result); //success回调
+                    result = JSON.parse(result);
+                    args.success.call(obj, result.data); //success回调
                     dl.dlData.loadedItem = obj.find(args.loadItem); //选中所有已加载项
                     dl.dlData.lastItem = dl.dlData.loadedItem.eq(dl.dlData.loadedItem.length - 1); //更新最后一项
                     if (result.allCount <= loadNumber) {
@@ -224,13 +272,176 @@ Mc.Util.Uri = {}; //uri类
         dl.obj = this;
     }
 })(jQuery);
+
+/**
+ * 下拉分页V2
+ * version 1.0
+ * Update 2016年3月12日14:07:32
+ * Author Zero
+ */
+Mc.DropDownLoad = function (options) {
+    var args = $.extend({
+        scrollItem: document,
+        loadItem: "li", //加载项选择器
+        pageSize: 15, //分页数
+        isLoadFirst: false, //是否自动加载第一页
+        touchOptimize: false, //触屏优化
+        //ajax参数封装
+        type: "post",
+        async: true,
+        url: "", //请求的url
+        data: {}, //控制器参数
+        noMoreJudge: function (result, loadNumber) { return result.allCount <= loadNumber }, //没有更多的判断函数 [result:返回值, loadNumber:已加载的个数] [true: 没有更多, false: 还有更多]
+        success: function () { },
+        beforeSend: function () { },
+        noMore: function () { }
+    }, options);
+
+    var _this = this;
+
+    //dl 为 dropLoad缩写
+    var dl = {
+        dlData: null,
+        //获取参数
+        getArgs: function () {
+            dl.dlData = _this.dlData; //获取参数
+        },
+        //更新数据
+        updateData: function (obj, args) {
+            var $loadedItem = obj.find(args.loadItem); //选中所有已加载项
+            dl.dlData.loadedItemLength = $loadedItem.length;
+            $loadedItem.length && (dl.dlData.lastItem = $loadedItem.eq(dl.dlData.loadedItemLength - 1)); //更新最后一项
+        },
+        //初始化
+        init: function (obj, args) {
+            return (function () {
+                dl.initData(); //初始化内部属性
+                dl.loadFirst(obj, args); //加载第一页数据
+                dl.bindEvent(obj, args); //绑定触发事件
+                //dl.updateData(obj, args); //初始化参数
+            })();
+        },
+        //初始化内部属性
+        initData: function () {
+            if (!_this.dlData) {
+                _this.dlData = {
+                    //初始化参数
+                    isAjax: false, //是否正在ajax
+                    pageIndex: 1, //当前页码
+                    loadedItemLength: null, //所有已载项的个数
+                    lastItem: null //已加载项的最后一项
+                }
+                dl.getArgs(); //获取参数
+            }
+        },
+        //加载第一页数据
+        loadFirst: function (obj, args) {
+            if (args.isLoadFirst) { //如果要自动加载第一页
+                dl.ajaxNewData(obj, args, 0); //加载第一页数据
+            } else {
+                dl.dlData.pageIndex = 2; //默认已加载完成第一页
+            }
+            dl.updateData(obj, args); //初始化参数
+        },
+        //绑定触发事件
+        bindEvent: function (obj, args) {
+            if (args.touchOptimize) { //如果启用触屏优化则添加touchmove事件
+                //移动端,touchmove事件
+                $(args.scrollItem).off('touchmove').on('touchmove', function () {
+                    dl.pageDown(obj, args); //下拉事件
+                });
+            }
+            //PC端,scroll事件
+            $(args.scrollItem).off('scroll').on('scroll', function () {
+                dl.pageDown(obj, args); //下拉事件
+            });
+        },
+        //滚动下拉触发事件
+        pageDown: function (obj, args) {
+            //如果没有进行中的请求并且符合[触发条件]则请求
+            if (!dl.dlData.isAjax) {
+                //[触发条件]如果最后一项存在并且最后一项显示在页面中则请求
+                if (dl.dlData.lastItem && dl.dlData.lastItem.offset().top + dl.dlData.lastItem.height() - $(window).scrollTop() < $(window).height()) {
+                    dl.dlData.isAjax = true; //改变标记变量值(防止多重请求)
+                    var loadNumber = dl.dlData.loadedItemLength; //已加载项总数
+                    dl.dlData.pageIndex = Math.ceil(loadNumber / args.pageSize) + 1; //计算当前页码
+                    dl.ajaxNewData(obj, args);
+                }
+            }
+        },
+        //请求新的数据
+        ajaxNewData: function (obj, args, returnData) {
+            var ajaxDef = $.Deferred();
+            Mc.Ajax({
+                type: args.type,
+                url: args.url,
+                data: $.extend({
+                    "pageSize": args.pageSize, //分页数
+                    "pageIndex": dl.dlData.pageIndex //当前页页码
+                }, args.data),
+                async: args.async,
+                success: function (result) {
+                    //result = JSON.parse(result);
+                    //判断是否为返回数据
+                    if (returnData) {
+                        dl.dlData.isAjax = false;
+                        ajaxDef.resolve(result);
+                    } else {
+                        dl.updateData(obj, args); //更新参数
+                        if (args.noMoreJudge(result, dl.dlData.loadedItemLength)) {
+                            //如果没有更多
+                            dl.dlData.isAjax = true;
+                            args.noMore.call(obj, result); //noMore回调
+                        } else {
+                            //还有更多
+                            dl.dlData.isAjax = false;
+                        }
+                        args.success.call(obj, result); //success回调
+                    }
+                },
+                beforeSend: function () {
+                    dl.dlData.isAjax = true;
+                    args.beforeSend.call(obj); //beforeSend回调
+                }
+            });
+            return ajaxDef;
+        }
+    }
+    /**
+     * 初始化函数
+     * @param {} obj 列表的jQuery选择器
+     * @param {} options 可重设options
+     * @returns {} 
+     */
+    _this.init = function (target, options) {
+        options && options.data && (options.data = $.extend(args.data, options.data)); //如果options有data对象先混合data对象
+        args = $.extend(args, options);
+        dl.init($(target), args);
+    }
+    /**
+     * 使用Mc.dropDownLoad之前对象定义的参数请求数据并通过Deferred对象返回数据
+     * @param {} options 可重设options
+     * @returns {} 
+     */
+    _this.ajaxData = function (options) {
+        var def = $.Deferred();
+        options && options.data && (options.data = $.extend(args.data, options.data)); //如果options有data对象先混合data对象
+        args = $.extend(args, options);
+        dl.initData(); //初始化内部属性
+        dl.ajaxNewData(this, args, true).then(function (result) {
+            def.resolve(result);
+        });
+        return def;
+    };
+}
+
 /**
  * 点击分页
  * version 1.3
  * Update 2015年11月24日00:05:50
  * Author Zero
  */
-(function ($) {
+; (function ($) {
     var ms = {
         msData: null,
         //获取参数
@@ -1457,6 +1668,9 @@ Mc.Util.EffectChange = function (options) {
         "FIO": effectFn.endFadeInOut,
         "SDU": effectFn.endSlideDownUp
     };
+    var $targetF = null; //绑定对象
+    var $efcBtn = null; //所有选项
+    var $efcPage = null; //所有选项目标
     //初始化
     function effectChageIni() {
         $(settings.target + " [mc-efc-page]").each(function (i, val) {
@@ -1466,11 +1680,21 @@ Mc.Util.EffectChange = function (options) {
             }
         });
     }
+    //选项
+    var opt = {
+        //更新函数
+        update: function () {
+            effectChageIni();
+            $targetF = $(settings.target); //更新绑定对象
+            $efcBtn = $targetF.find("[mc-efc-btn]"); //更新所有选项
+            $efcPage = $targetF.find("[mc-efc-page]"); //更新所有选项目标
+        }
+    };
     (function () {
         effectChageIni(); //初始化
-        var $targetF = $(settings.target); //获取绑定对象
-        var $efcBtn = $targetF.find("[mc-efc-btn]"); //所有选项
-        var $efcPage = $targetF.find("[mc-efc-page]"); //所有选项目标
+        $targetF = $(settings.target); //获取绑定对象
+        $efcBtn = $targetF.find("[mc-efc-btn]"); //所有选项
+        $efcPage = $targetF.find("[mc-efc-page]"); //所有选项目标
         var condition1 = !settings.lessOneActive; //条件1 - 可以全处于冻结状态
         //开始特效
         function effectStart(efcTarget) {
@@ -1515,6 +1739,7 @@ Mc.Util.EffectChange = function (options) {
             }
         });
     })();
+    return opt;
 }
 
 /**
@@ -1733,12 +1958,26 @@ Mc.Util.Check.checkPhoneCode = function (phoneCode) {
 };
 
 /**
+ * [Checkphonecode 正则表达式验证电话号码是否正确]
+ * @param  {varchar} phoneCode
+ * @return {Boolean}
+ */
+Mc.Util.Check.checkLandlinePhoneCode = function (landlinePhoneCode) {
+    var reg;
+    if (Mc.Util.String.isOnlyOne(landlinePhoneCode)) {
+        reg = /(\d{4}-)?\d{6,8}/;
+        return reg.test(landlinePhoneCode);
+    }
+    return false;
+};
+
+/**
  * [Checkmailcode 正则表达式验证邮箱是否正确]
  * @param  {varchar}email
  * @return {Boolean}
  */
 Mc.Util.Check.checkMailCode = function (email) {
-    var right = /^[0-9A-Za-zd]+([-_.][A-Za-zd]+)*@([A-Za-zd]+[-.])+[A-Za-zd]{2,5}$/;
+    var right = /^[0-9A-Za-zd]+([-_.][A-Za-zd]+)*@([A-Za-zd0-9]+[-.])+[A-Za-zd]{2,5}$/;
     if (email.match(right)) {
         return true;
     }
@@ -1832,7 +2071,7 @@ Mc.Util.Uri.getUrlParamArray = function () {
  * *获取单个Url参数
  * @returns {} 
  */
-Mc.Util.Uri.getUrlParam = function (name) {
+Mc.Util.Uri.getUrlParamByName = function (name) {
     var reg = new RegExp("(^|&)" + name + "=([^&]*)(&|$)");
     var r = window.location.search.substr(1).match(reg);
     if (r != null) return decodeURIComponent(r[2]); return null;
