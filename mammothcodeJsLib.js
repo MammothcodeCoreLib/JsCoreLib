@@ -1,6 +1,6 @@
 ﻿//MammothcodeCoreJsLib
-//Version 0.2.7.1
-//Date 2016年3月15日10:08:40
+//Version 0.2.7.2
+//Date 2016年3月22日20:43:55
 //Edit Zero
 
 //======= namespacep START=======//
@@ -20,8 +20,8 @@ Mc.Global = {}; //全局对象
 
 /**
  * ajax 数据请求
- * version 1.1
- * Update 2016年3月15日10:09:02
+ * version 1.2
+ * Update 2016年3月22日20:43:46
  * Author Zero
  */
 Mc.Global.mc_isAjax = [];
@@ -45,15 +45,11 @@ Mc.Ajax = function (options) {
             ansyc: settings.ansyc,
             success: function (json, textStatus) {
                 Mc.Global.mc_isAjax[settings.id] = false;
-                var response = JSON.parse(json)["response"];
-                var resultData = JSON.parse(response.result);
-                if (response.state === "success") { //返回数据
-                    settings.success.call(this, resultData, response.msg, textStatus);
-                } else if (response.state === "jump") { //重定向
-                    window.location.href = resultData.uri;
-                    return;
-                } else if (response.state === "fail") { //请求失败
-                    settings.fail.call(this, response.errorMsg, response.msg, textStatus);
+                var response = JSON.parse(json);
+                if (response.isSuccess) { //返回数据
+                    settings.success.call(this, response, textStatus);
+                } else { //请求失败
+                    settings.fail.call(this, response, textStatus);
                 }
             },
             beforeSend: function () {
