@@ -31,7 +31,7 @@ Mc.Ajax = function (options) {
         url: "",
         data: {},
         type: "post",
-        ansyc: true,
+        async: true,
         success: function () { }, //请求成功回调 [resultData, msg, textStatus]
         fail: function () { }, //请求失败回调 [errorMsg, msg, textStatus]
         beforeSend: function () { }
@@ -42,7 +42,7 @@ Mc.Ajax = function (options) {
             url: settings.url,
             data: settings.data,
             type: settings.type,
-            ansyc: settings.ansyc,
+            async: settings.async,
             success: function (json, textStatus) {
                 Mc.Global.mc_isAjax[settings.id] = false;
                 var response = JSON.parse(json);
